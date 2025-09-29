@@ -12,6 +12,9 @@ const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
 const axios = require('axios');
+const { spawn } = require('child_process');
+const { promisify } = require('util');
+const sleep = promisify(setTimeout);
 
 const app = express();
 
@@ -19,6 +22,11 @@ const app = express();
 const PORT = parseInt(process.env.PORT) || 3000;
 const OLLAMA_HOST = process.env.OLLAMA_HOST || 'http://localhost:11434';
 const MODEL_NAME = process.env.MODEL_NAME || 'kimi-k2:1t-cloud';
+const AUTO_START_OLLAMA = process.env.AUTO_START_OLLAMA !== 'false'; // Default to true
+const MAX_OLLAMA_WAIT_TIME = 30000; // 30 seconds
+
+// Global variables for Ollama process management
+let ollamaProcess = null;
 
 /**
  * Global error handlers for uncaught exceptions and unhandled rejections
@@ -240,46 +248,183 @@ app.use((req, res) => {
 });
 
 /**
- * Checks Ollama connectivity and model availability on startup
- * @returns {Promise<boolean>} True if Ollama is accessible, false otherwise
+ * Start Ollama service if not running
+ * @returns {Promise<boolean>} True if Ollama is available, false otherwise
  */
-async function checkOllamaConnection() {
-  try {
-    console.log('Checking Ollama connection...');
-    const response = await axios.get(`${OLLAMA_HOST}/api/version`, { 
-      timeout: 10000 
-    });
-    console.log(`Ollama is accessible (version: ${response.data.version || 'unknown'})`);
-    
-    // Check if the specified model is available
+async function startOllamaIfNeeded() {
     try {
-      const modelsResponse = await axios.get(`${OLLAMA_HOST}/api/tags`, { 
-        timeout: 10000 
-      });
-      const availableModels = modelsResponse.data.models || [];
-      const modelExists = availableModels.some(model => model.name === MODEL_NAME);
-      
-      if (modelExists) {
-        console.log(`Model "${MODEL_NAME}" is available`);
-      } else {
-        console.log(`Warning: Model "${MODEL_NAME}" not found`);
-        console.log('Available models:', 
-          availableModels.map(m => m.name).join(', ') || 'none');
-        console.log(`To install the model, run: ollama pull ${MODEL_NAME}`);
-      }
-    } catch (modelError) {
-      console.log('Warning: Could not check available models');
+        // First check if Ollama is already running
+        const response = await axios.get(`${OLLAMA_HOST}/api/version`, { timeout: 5000 });
+        console.log(`Ollama service is already running (version: ${response.data.version || 'unknown'})`);
+        return true;
+    } catch (error) {
+        if (!AUTO_START_OLLAMA) {
+            console.log('Ollama is not running and auto-start is disabled');
+            console.log('To start Ollama manually, run: ollama serve');
+            return false;
+        }
+
+        console.log('Ollama service not detected, attempting to start...');
+        
+        try {
+            // Try to start Ollama
+            ollamaProcess = spawn('ollama', ['serve'], {
+                detached: false,
+                stdio: ['ignore', 'pipe', 'pipe']
+            });
+
+            // Handle process output
+            ollamaProcess.stdout.on('data', (data) => {
+                const output = data.toString().trim();
+                if (output) console.log(`Ollama: ${output}`);
+            });
+
+            ollamaProcess.stderr.on('data', (data) => {
+                const message = data.toString().trim();
+                if (!message.includes('address already in use') && message) {
+                    console.log(`Ollama: ${message}`);
+                }
+            });
+
+            ollamaProcess.on('error', (error) => {
+                console.error('Failed to start Ollama process:', error.message);
+            });
+
+            ollamaProcess.on('exit', (code, signal) => {
+                if (code !== 0 && code !== null) {
+                    console.log(`Ollama process exited with code ${code}`);
+                }
+            });
+
+            // Wait for Ollama to be ready
+            console.log('Waiting for Ollama service to be ready...');
+            const startTime = Date.now();
+            
+            while (Date.now() - startTime < MAX_OLLAMA_WAIT_TIME) {
+                try {
+                    await sleep(2000);
+                    const response = await axios.get(`${OLLAMA_HOST}/api/version`, { timeout: 3000 });
+                    console.log(`Ollama service is now ready (version: ${response.data.version || 'unknown'})`);
+                    return true;
+                } catch (waitError) {
+                    // Service not ready yet, continue waiting
+                }
+            }
+
+            console.error('Ollama service did not become ready within the timeout period');
+            return false;
+
+        } catch (startError) {
+            console.error('Failed to start Ollama:', startError.message);
+            return false;
+        }
+    }
+}
+
+/**
+ * Ensure the required model is available
+ * @returns {Promise<boolean>} True if model is available, false otherwise
+ */
+async function ensureModelAvailable() {
+    try {
+        console.log(`Checking if model "${MODEL_NAME}" is available...`);
+        
+        const response = await axios.get(`${OLLAMA_HOST}/api/tags`, { timeout: 10000 });
+        const models = response.data.models || [];
+        
+        const modelExists = models.some(model => model.name === MODEL_NAME);
+        
+        if (modelExists) {
+            console.log(`Model "${MODEL_NAME}" is available`);
+            return true;
+        }
+
+        console.log(`Model "${MODEL_NAME}" not found. Available models:`, 
+            models.map(m => m.name).join(', ') || 'none');
+        
+        console.log(`Attempting to pull model "${MODEL_NAME}"...`);
+        console.log('This may take several minutes depending on model size...');
+
+        // Attempt to pull the model
+        const pullResponse = await axios.post(`${OLLAMA_HOST}/api/pull`, {
+            name: MODEL_NAME
+        }, { 
+            timeout: 300000, // 5 minutes timeout for model pulling
+            responseType: 'stream'
+        });
+
+        return new Promise((resolve, reject) => {
+            let lastProgress = '';
+            
+            pullResponse.data.on('data', (chunk) => {
+                const lines = chunk.toString().split('\n').filter(line => line.trim());
+                
+                for (const line of lines) {
+                    try {
+                        const data = JSON.parse(line);
+                        if (data.status && data.status !== lastProgress) {
+                            console.log(`Pull progress: ${data.status}`);
+                            lastProgress = data.status;
+                        }
+                        
+                        if (data.status === 'success') {
+                            console.log(`Model "${MODEL_NAME}" pulled successfully`);
+                            resolve(true);
+                            return;
+                        }
+                        
+                        if (data.error) {
+                            console.error('Model pull error:', data.error);
+                            resolve(false);
+                            return;
+                        }
+                    } catch (parseError) {
+                        // Ignore JSON parse errors for progress updates
+                    }
+                }
+            });
+
+            pullResponse.data.on('end', () => {
+                console.log(`Model "${MODEL_NAME}" pull completed`);
+                resolve(true);
+            });
+
+            pullResponse.data.on('error', (error) => {
+                console.error('Error during model pull:', error.message);
+                resolve(false);
+            });
+        });
+
+    } catch (error) {
+        console.error('Error checking/pulling model:', error.message);
+        console.log(`To install the model manually, run: ollama pull ${MODEL_NAME}`);
+        return false;
+    }
+}
+
+/**
+ * Initialize Ollama service and ensure model availability
+ * @returns {Promise<boolean>} True if everything is ready, false otherwise
+ */
+async function initializeOllama() {
+    console.log('Initializing Ollama service...');
+    
+    // Step 1: Start Ollama if needed
+    const ollamaStarted = await startOllamaIfNeeded();
+    if (!ollamaStarted) {
+        console.log('Failed to start or connect to Ollama service');
+        return false;
     }
     
-    return true;
-  } catch (error) {
-    console.log('Ollama is not accessible. Please ensure Ollama is running.');
-    console.log(`Expected Ollama at: ${OLLAMA_HOST}`);
-    if (error.code === 'ECONNREFUSED') {
-      console.log('To start Ollama, run: ollama serve');
+    // Step 2: Ensure model is available
+    const modelReady = await ensureModelAvailable();
+    if (!modelReady) {
+        console.log('Model is not available and could not be installed');
+        return false;
     }
-    return false;
-  }
+    
+    console.log('Ollama initialization completed successfully');
+    return true;
 }
 
 /**
@@ -290,21 +435,33 @@ async function checkOllamaConnection() {
  * @returns {Promise<Server>} Express server instance
  */
 async function startServer(port) {
-  // Check Ollama connection on startup
-  await checkOllamaConnection();
+  // Initialize Ollama service and model
+  console.log('Starting Kimi-K2 Chatbot Backend...');
+  const ollamaReady = await initializeOllama();
+  
+  if (!ollamaReady) {
+    console.log('Warning: Ollama is not ready. The server will start but chat functionality may not work.');
+    console.log('You can manually start Ollama with: ollama serve');
+    console.log(`Then pull the model with: ollama pull ${MODEL_NAME}`);
+  }
   
   const server = app.listen(port, () => {
-    console.log(`Kimi-K2 Chatbot Backend running on port ${port}`);
-    console.log(`Ollama host: ${OLLAMA_HOST}`);
-    console.log(`Model: ${MODEL_NAME}`);
-    console.log(`Health check: http://localhost:${port}/health`);
-    console.log(`Chat API: http://localhost:${port}/api/chat`);
     console.log('');
-    console.log('To test the server:');
-    console.log(`  curl http://localhost:${port}/health`);
+    console.log('='.repeat(60));
+    console.log(`  Kimi-K2 Chatbot Backend running on port ${port}`);
+    console.log('='.repeat(60));
+    console.log(`  Ollama host: ${OLLAMA_HOST}`);
+    console.log(`  Model: ${MODEL_NAME}`);
+    console.log(`  Auto-start Ollama: ${AUTO_START_OLLAMA ? 'enabled' : 'disabled'}`);
     console.log('');
-    console.log('Frontend should connect to: http://localhost:' + port);
-    console.log('Press Ctrl+C to stop the server');
+    console.log('  API Endpoints:');
+    console.log(`    Health check: http://localhost:${port}/health`);
+    console.log(`    Chat API: http://localhost:${port}/api/chat`);
+    console.log('');
+    console.log('  Frontend should connect to: http://localhost:' + port);
+    console.log('');
+    console.log('  Press Ctrl+C to stop the server');
+    console.log('='.repeat(60));
   });
 
   server.on('error', (err) => {
@@ -333,28 +490,51 @@ startServer(PORT).then(server => {
 
 /**
  * Graceful shutdown handlers
- * Properly close the server on interrupt signals
+ * Properly close the server and Ollama process on interrupt signals
  */
-process.on('SIGTERM', () => {
-  console.log('SIGTERM received, shutting down gracefully...');
+function gracefulShutdown(signal) {
+  console.log(`${signal} received, shutting down gracefully...`);
+  
+  // Close the Express server
   if (process.server) {
     process.server.close(() => {
       console.log('Server closed successfully');
-      process.exit(0);
+      
+      // Close Ollama process if we started it
+      if (ollamaProcess && !ollamaProcess.killed) {
+        console.log('Stopping Ollama process...');
+        ollamaProcess.kill('SIGTERM');
+        
+        // Give it 5 seconds to shut down gracefully
+        setTimeout(() => {
+          if (!ollamaProcess.killed) {
+            console.log('Force killing Ollama process...');
+            ollamaProcess.kill('SIGKILL');
+          }
+          process.exit(0);
+        }, 5000);
+      } else {
+        process.exit(0);
+      }
     });
   } else {
-    process.exit(0);
+    // Close Ollama process if we started it
+    if (ollamaProcess && !ollamaProcess.killed) {
+      console.log('Stopping Ollama process...');
+      ollamaProcess.kill('SIGTERM');
+      
+      setTimeout(() => {
+        if (!ollamaProcess.killed) {
+          console.log('Force killing Ollama process...');
+          ollamaProcess.kill('SIGKILL');
+        }
+        process.exit(0);
+      }, 5000);
+    } else {
+      process.exit(0);
+    }
   }
-});
+}
 
-process.on('SIGINT', () => {
-  console.log('SIGINT received, shutting down gracefully...');
-  if (process.server) {
-    process.server.close(() => {
-      console.log('Server closed successfully');
-      process.exit(0);
-    });
-  } else {
-    process.exit(0);
-  }
-});
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));

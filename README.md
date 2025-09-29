@@ -41,42 +41,76 @@ This application provides a clean, modern interface for interacting with the Kim
 - **AI Model**: Kimi-K2 served via Ollama REST API
 - **Communication**: RESTful HTTP/JSON API
 
-## Prerequisites
+## 🚀 Quick Start
 
-- **Node.js**: Version 16 or higher
-- **Ollama**: Installed and running locally
-- **Kimi-K2 Model**: Available in Ollama
+### Prerequisites
+- **Node.js** (v18 or higher)
+- **Ollama** installed on your system
 
-## Installation
+### Installation & Setup
 
-### 1. Install Dependencies
-```bash
-cd backend
-npm install
+1. **Clone and Setup**
+   ```bash
+   cd backend
+   npm install
+   ```
+
+2. **Automated Startup (Recommended)**
+   ```bash
+   # Full automated setup - starts Ollama, pulls model, starts server
+   npm run start:full
+   
+   # For Windows users
+   npm run start:win
+   
+   # Setup only (installs Ollama and model without starting server)
+   npm run setup
+   ```
+
+3. **Manual Startup**
+   ```bash
+   # Start Ollama service
+   ollama serve
+   
+   # Pull the required model (in another terminal)
+   ollama pull kimi-k2:1t-cloud
+   
+   # Start the backend server
+   npm start
+   ```
+
+4. **Open Frontend**
+   Open `frontend/index.html` in your browser or use a local server:
+   ```bash
+   # Using Python
+   cd frontend
+   python -m http.server 8080
+   
+   # Using Node.js (if you have http-server)
+   npx http-server frontend -p 8080
+   ```
+
+### Environment Configuration
+
+Create a `.env` file in the backend directory for custom configuration:
+
+```env
+PORT=3000
+OLLAMA_HOST=http://localhost:11434
+MODEL_NAME=kimi-k2:1t-cloud
+AUTO_START_OLLAMA=true
+NODE_ENV=development
 ```
 
-### 2. Install and Setup Ollama
-```bash
-# Install Ollama (if not already installed)
-curl -fsSL https://ollama.ai/install.sh | sh
+### Startup Scripts
 
-# Start Ollama service
-ollama serve
-
-# Pull the Kimi-K2 model
-ollama pull kimi-k2:1t-cloud
-```
-
-### 3. Start the Application
-```bash
-# Start backend server
-cd backend
-npm start
-
-# Open frontend in browser
-# Open frontend/index.html in your web browser
-# Or serve via a local web server for best experience
-```
+| Script | Description |
+|--------|-------------|
+| `npm start` | Start server only (requires Ollama to be running) |
+| `npm run start:full` | Full automated startup with Ollama management (Unix/Linux/macOS) |
+| `npm run start:win` | Full automated startup for Windows |
+| `npm run setup` | Install Ollama and pull model without starting server |
+| `npm run dev` | Development mode with auto-restart |
 
 ## API Reference
 
@@ -161,16 +195,52 @@ npm run dev
 
 ### Common Issues
 
-**Port already in use**: The application automatically finds available ports starting from 3000.
+**Ollama not starting automatically:**
+- Ensure Ollama is installed: `ollama --version`
+- Check if Ollama is already running: `curl http://localhost:11434/api/version`
+- Try manual startup: `ollama serve`
 
-**Ollama not accessible**: Ensure Ollama is running with `ollama serve` and the model is pulled.
+**Model download failing:**
+- Check internet connection
+- Verify model name: `ollama list`
+- Try manual pull: `ollama pull kimi-k2:1t-cloud`
 
-**Model not found**: Install the required model with `ollama pull kimi-k2:1t-cloud`.
+**Port conflicts:**
+- The server automatically tries the next available port if 3000 is in use
+- Check the console output for the actual port being used
+- Update frontend configuration if needed
+
+**Permission errors on Unix systems:**
+- Make startup script executable: `chmod +x backend/start.sh`
+- Run with proper permissions or use `npm run start:full`
+
+**Frontend not connecting:**
+- Check browser console for errors
+- Ensure CORS is enabled (automatically configured)
+- Verify the backend URL in browser network tab
+
+### Environment Variables
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `PORT` | 3000 | Backend server port |
+| `OLLAMA_HOST` | http://localhost:11434 | Ollama service URL |
+| `MODEL_NAME` | kimi-k2:1t-cloud | AI model to use |
+| `AUTO_START_OLLAMA` | true | Automatically start Ollama if not running |
+| `NODE_ENV` | development | Environment mode |
+
+### Performance Tips
+
+- **Model Loading**: First response may be slower while the model loads into memory
+- **Memory Usage**: Large models require significant RAM (8GB+ recommended)
+- **Response Time**: Typical response time is 2-10 seconds depending on query complexity
+- **Concurrent Users**: Server supports multiple simultaneous connections
 
 ### Debugging
-- Check browser console for frontend errors
-- Monitor backend logs for API issues
-- Verify Ollama status with `ollama list`
+- **Backend Logs**: Check console for Ollama connection status, model availability, and request details
+- **Frontend Debugging**: Open browser Developer Tools (F12) and check Console/Network tabs
+- **Health Check**: Visit `http://localhost:3000/health` to verify server and Ollama status
+- **Model Status**: Run `ollama list` to see available models
 
 ## Contributing
 
