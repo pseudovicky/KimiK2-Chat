@@ -1,0 +1,146 @@
+{
+  "product_name": "Coding Copilot Chatbot",
+  "model_spec": {
+    "invoke_command": "ollama run kimi-k2:1t-cloud",
+    "model_name": "kimi-k2:1t-cloud",
+    "description": "A mixture-of-experts (MoE) model with ~32B activated parameters from a 1T-param base. Supports strong reasoning & coding. :contentReference[oaicite:0]{index=0}",
+    "capabilities": [
+      "Code generation (JS, HTML, CSS, etc.)",
+      "Code explanation & debugging",
+      "Multi-turn conversational context"
+    ],
+    "recommended_temperature": 0.6,
+    "tool_support": true,
+    "note": "Kimi-K2 supports tool calling when you pass available tool definitions (JSON schema) in the request. :contentReference[oaicite:1]{index=1}"
+  },
+  "architecture": {
+    "frontend": {
+      "technology": "HTML + CSS + JavaScript",
+      "libraries": [
+        "ollama-js (browser / fetch wrapper) :contentReference[oaicite:2]{index=2}",
+        "syntax highlighting (e.g. Prism.js or highlight.js)",
+        "UI state management (vanilla or minimal custom code)"
+      ]
+    },
+    "backend": {
+      "role": "Proxy / API gateway",
+      "technology": "Node.js (Express) — very lightweight",
+      "functions": [
+        "Receive chat requests from frontend",
+        "Forward to Ollama REST API",
+        "Handle streaming (if enabled) or full response",
+        "Sanitize/validate input",
+        "Optionally cache responses (for repeated prompts)",
+        "Error handling and fallback"
+      ]
+    },
+    "communication": {
+      "frontend_to_backend": "HTTP POST /api/chat (JSON body)",
+      "backend_to-ollama": "HTTP POST to Ollama REST /api/chat endpoint on localhost or remote",
+      "response": "JSON with content and optionally metadata"
+    }
+  },
+  "api_spec": {
+    "endpoints": {
+      "/api/chat": {
+        "method": "POST",
+        "request_body_schema": {
+          "type": "object",
+          "properties": {
+            "messages": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "role": { "type": "string", "enum": ["user","assistant","system"] },
+                  "content": { "type": "string" }
+                },
+                "required": ["role","content"]
+              }
+            }
+          },
+          "required": ["messages"]
+        },
+        "response_body_schema": {
+          "type": "object",
+          "properties": {
+            "reply": { "type": "string" },
+            "usage": { "type": "object" }
+          },
+          "required": ["reply"]
+        }
+      }
+    }
+  },
+  "ui_flow": {
+    "initial": {
+      "show": "welcome message + prompt input",
+      "action": "user enters prompt or selects template"
+    },
+    "on_submit": {
+      "disable_input": true,
+      "show_loading": true,
+      "send_request": "/api/chat",
+      "on_response": {
+        "enable_input": true,
+        "display_reply": true
+      }
+    },
+    "message_rendering": {
+      "detect_code_blocks": true,
+      "apply_syntax_highlight": true,
+      "allow_copy": true
+    }
+  },
+  "functional_requirements": [
+    "User can send natural language prompt to chatbot",
+    "Conversation context is preserved (multi-turn)",
+    "Model responses rendered with code blocks styled",
+    "Backend safely forwards to Ollama and returns reply",
+    "Error messages shown clearly (on timeouts, failures)",
+    "Basic prompt templates built in (e.g. “Generate JS function”)"
+  ],
+  "nonfunctional_requirements": [
+    "Latency should be acceptable (<5s for small prompts)",
+    "Scalable usage is not required",
+    "API credentials hidden (backend only)",
+    "Frontend minimal and dependency-light",
+    "System should be extensible (you may add features later)"
+  ],
+  "milestones": [
+    {
+      "name": "Model integration",
+      "deliverable": "Backend that can call `ollama run kimi-k2:1t-cloud` or REST equivalent and return responses"
+    },
+    {
+      "name": "Frontend chat UI",
+      "deliverable": "Simple chat interface with prompt input and display of responses"
+    },
+    {
+      "name": "Code rendering & highlighting",
+      "deliverable": "Parse response and highlight code segments"
+    },
+    {
+      "name": "Error handling & logging",
+      "deliverable": "Show error states, log requests/responses"
+    },
+    {
+      "name": "Prompt templates & UX polish",
+      "deliverable": "Add built-in prompts, improve UI flows"
+    }
+  ],
+  "risks_and_mitigations": [
+    {
+      "risk": "Model returns incorrect or insecure code",
+      "mitigation": "Add disclaimer, allow user review, reject or sanitize certain dangerous code patterns"
+    },
+    {
+      "risk": "High latency or timeouts",
+      "mitigation": "Limit prompt length, show feedback, use streaming"
+    },
+    {
+      "risk": "Ollama service unavailable or misconfigured",
+      "mitigation": "Graceful fallback or error messages"
+    }
+  ]
+}

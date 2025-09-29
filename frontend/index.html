@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="description" content="Kimi-K2 Coding Copilot - AI-powered coding assistant">
+    <meta name="author" content="Kimi-K2 Chatbot Team">
+    <title>Kimi-K2 Coding Copilot</title>
+    
+    <!-- External Stylesheets -->
+    <link rel="stylesheet" href="styles.css">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-tomorrow.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+</head>
+<body>
+    <!-- Main Application Container -->
+    <div class="app-container">
+        
+        <!-- Application Header -->
+        <header class="app-header">
+            <div class="header-content">
+                <h1 class="app-title">
+                    <i class="fas fa-robot" aria-hidden="true"></i>
+                    Kimi-K2 Coding Copilot
+                </h1>
+                <div class="model-info">
+                    <span class="model-badge">kimi-k2:1t-cloud</span>
+                    <div class="status-indicator" id="status-indicator">
+                        <span class="status-dot" aria-hidden="true"></span>
+                        <span class="status-text">Ready</span>
+                    </div>
+                </div>
+            </div>
+        </header>
+
+        <!-- Main Chat Area -->
+        <main class="chat-main">
+            
+            <!-- Prompt Templates Section -->
+            <section class="templates-section" id="templates-section">
+                <div class="templates-header" onclick="toggleTemplates()" role="button" tabindex="0" aria-expanded="true">
+                    <h3><i class="fas fa-magic" aria-hidden="true"></i> Quick Start Templates</h3>
+                    <i class="fas fa-chevron-down toggle-icon" id="toggle-icon" aria-hidden="true"></i>
+                </div>
+                <div class="templates-content" id="templates-content">
+                    <div class="template-grid">
+                        <button class="template-btn" data-template="generate-function" aria-label="Generate Function Template">
+                            <i class="fas fa-code" aria-hidden="true"></i>
+                            Generate Function
+                        </button>
+                        <button class="template-btn" data-template="debug-code" aria-label="Debug Code Template">
+                            <i class="fas fa-bug" aria-hidden="true"></i>
+                            Debug Code
+                        </button>
+                        <button class="template-btn" data-template="explain-code" aria-label="Explain Code Template">
+                            <i class="fas fa-info-circle" aria-hidden="true"></i>
+                            Explain Code
+                        </button>
+                        <button class="template-btn" data-template="optimize-code" aria-label="Optimize Code Template">
+                            <i class="fas fa-rocket" aria-hidden="true"></i>
+                            Optimize Code
+                        </button>
+                        <button class="template-btn" data-template="write-tests" aria-label="Write Tests Template">
+                            <i class="fas fa-vial" aria-hidden="true"></i>
+                            Write Tests
+                        </button>
+                        <button class="template-btn" data-template="refactor-code" aria-label="Refactor Code Template">
+                            <i class="fas fa-tools" aria-hidden="true"></i>
+                            Refactor Code
+                        </button>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Chat Messages Container -->
+            <div class="chat-container" id="chat-container" role="log" aria-live="polite" aria-label="Chat messages">
+                <!-- Welcome Message -->
+                <div class="welcome-message" id="welcome-message">
+                    <div class="welcome-content">
+                        <i class="fas fa-robot welcome-icon" aria-hidden="true"></i>
+                        <h2>Welcome to Kimi-K2 Coding Copilot</h2>
+                        <p>Your AI-powered coding assistant. I can help you with:</p>
+                        <ul>
+                            <li><i class="fas fa-check" aria-hidden="true"></i> Generate code in any programming language</li>
+                            <li><i class="fas fa-check" aria-hidden="true"></i> Debug and fix existing code</li>
+                            <li><i class="fas fa-check" aria-hidden="true"></i> Explain complex algorithms and concepts</li>
+                            <li><i class="fas fa-check" aria-hidden="true"></i> Optimize and refactor your code</li>
+                            <li><i class="fas fa-check" aria-hidden="true"></i> Write comprehensive tests</li>
+                        </ul>
+                        <p class="welcome-footer">Get started by typing a message below or using one of the quick templates above.</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Loading Indicator -->
+            <div class="loading-container" id="loading-container" style="display: none;" role="status" aria-label="Loading">
+                <div class="loading-message">
+                    <div class="typing-indicator" aria-hidden="true">
+                        <div class="typing-dot"></div>
+                        <div class="typing-dot"></div>
+                        <div class="typing-dot"></div>
+                    </div>
+                    <span>Kimi-K2 is thinking...</span>
+                </div>
+            </div>
+        </main>
+
+        <!-- Input Section -->
+        <footer class="input-section">
+            <div class="input-container">
+                <div class="input-wrapper">
+                    <label for="message-input" class="sr-only">Message input</label>
+                    <textarea 
+                        id="message-input" 
+                        placeholder="Ask me anything about coding... (Press Ctrl+Enter to send)"
+                        rows="1"
+                        maxlength="4000"
+                        aria-describedby="char-count"
+                    ></textarea>
+                    <div class="input-actions">
+                        <div class="char-counter">
+                            <span id="char-count" aria-label="Character count">0</span>/4000
+                        </div>
+                        <button id="send-button" class="send-btn" disabled aria-label="Send message">
+                            <i class="fas fa-paper-plane" aria-hidden="true"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </footer>
+    </div>
+
+    <!-- Error Modal -->
+    <div class="modal-overlay" id="error-modal" style="display: none;" role="dialog" aria-labelledby="error-title" aria-modal="true">
+        <div class="modal">
+            <div class="modal-header">
+                <h3 id="error-title"><i class="fas fa-exclamation-triangle" aria-hidden="true"></i> Error</h3>
+                <button class="modal-close" onclick="closeErrorModal()" aria-label="Close error dialog">
+                    <i class="fas fa-times" aria-hidden="true"></i>
+                </button>
+            </div>
+            <div class="modal-body">
+                <p id="error-message">An error occurred</p>
+                <details class="error-details">
+                    <summary>Technical Details</summary>
+                    <pre id="error-details-content"></pre>
+                </details>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-primary" onclick="closeErrorModal()">OK</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- External Scripts -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-core.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/plugins/copy-to-clipboard/prism-copy-to-clipboard.min.js"></script>
+    
+    <!-- Application Script -->
+    <script src="app.js"></script>
+</body>
+</html>
