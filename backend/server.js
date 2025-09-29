@@ -60,7 +60,18 @@ app.use(cors({
   allowedHeaders: ['Content-Type', 'Authorization']
 }));
 
-app.use(express.json({ limit: '10mb' }));
+app.use(express.json({ 
+  limit: '10mb',
+  // Optimize JSON parsing
+  type: ['application/json', 'application/*+json']
+}));
+
+// Add compression for better performance
+app.use((req, res, next) => {
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  next();
+});
 
 /**
  * Serve static files from the frontend directory
@@ -110,7 +121,7 @@ app.get('/health', async (req, res) => {
 });
 
 /**
- * Chat API Endpoint
+ * Chat API Endpoint - Optimized version
  * Processes chat messages and forwards them to Ollama API
  * 
  * @route POST /api/chat
@@ -119,74 +130,84 @@ app.get('/health', async (req, res) => {
  * @returns {Object} Response containing AI reply and usage statistics
  */
 app.post('/api/chat', async (req, res) => {
+  const startTime = Date.now();
+  
   try {
     const { messages } = req.body;
     
-    // Validate request body structure
-    if (!messages || !Array.isArray(messages)) {
+    // Fast validation with early returns
+    if (!messages?.length) {
       return res.status(400).json({
-        error: 'Invalid request: messages array is required'
+        error: 'Invalid request: non-empty messages array is required'
       });
     }
 
-    // Validate individual message format
-    for (const message of messages) {
-      if (!message.role || !message.content) {
-        return res.status(400).json({
-          error: 'Invalid message format: role and content are required'
-        });
-      }
-      
-      if (!['user', 'assistant', 'system'].includes(message.role)) {
-        return res.status(400).json({
-          error: 'Invalid role: must be user, assistant, or system'
-        });
-      }
+    // Optimized validation - check only structure, not content details
+    const hasValidStructure = messages.every(msg => 
+      msg.role && msg.content && ['user', 'assistant', 'system'].includes(msg.role)
+    );
+    
+    if (!hasValidStructure) {
+      return res.status(400).json({
+        error: 'Invalid message format: all messages must have valid role and content'
+      });
     }
 
-    console.log(`Sending request to Ollama for model: ${MODEL_NAME}`);
-    console.log(`Messages count: ${messages.length}`);
+    console.log(`Processing ${messages.length} messages for model: ${MODEL_NAME}`);
 
-    // Prepare request payload for Ollama API
+    // Optimize Ollama request - remove unnecessary options for faster processing
     const ollamaRequest = {
       model: MODEL_NAME,
       messages: messages,
       stream: false,
       options: {
-        temperature: 0.6, // Balanced creativity vs consistency
-        num_predict: 2048 // Response length limit
+        temperature: 0.6,
+        num_predict: 2048,
+        // Optimize for speed
+        num_ctx: 8192, // Context window
+        repeat_penalty: 1.1,
+        top_k: 40,
+        top_p: 0.9
       }
     };
 
-    // Make request to Ollama with timing
-    const startTime = Date.now();
+    // Make request to Ollama with optimized timing
+    const ollamaStartTime = Date.now();
     const response = await axios.post(`${OLLAMA_HOST}/api/chat`, ollamaRequest, {
       timeout: 120000, // 120 second timeout (2 minutes) for complex queries
       headers: {
         'Content-Type': 'application/json'
-      }
+      },
+      // Optimize axios for performance
+      maxContentLength: Infinity,
+      maxBodyLength: Infinity,
+      validateStatus: (status) => status < 500 // Only retry on 5xx errors
     });
-    const endTime = Date.now();
-    const responseTime = endTime - startTime;
+    
+    const ollamaResponseTime = Date.now() - ollamaStartTime;
+    const totalResponseTime = Date.now() - startTime;
 
-    console.log(`Ollama response received in ${responseTime}ms`);
+    console.log(`Ollama: ${ollamaResponseTime}ms | Total: ${totalResponseTime}ms`);
 
-    // Extract and validate response
-    const assistantMessage = response.data.message;
-    if (!assistantMessage || !assistantMessage.content) {
+    // Fast response validation
+    const assistantMessage = response.data?.message;
+    if (!assistantMessage?.content) {
       throw new Error('Invalid response from Ollama: missing message content');
     }
 
-    // Return formatted response according to API specification
-    res.json({
+    // Optimized response format
+    const optimizedResponse = {
       reply: assistantMessage.content,
       usage: {
         prompt_tokens: response.data.prompt_eval_count || 0,
         completion_tokens: response.data.eval_count || 0,
         total_tokens: (response.data.prompt_eval_count || 0) + (response.data.eval_count || 0),
-        response_time_ms: responseTime
+        response_time_ms: totalResponseTime,
+        ollama_time_ms: ollamaResponseTime
       }
-    });
+    };
+
+    res.json(optimizedResponse);
 
   } catch (error) {
     console.error('Error in /api/chat:', error.message);

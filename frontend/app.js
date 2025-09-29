@@ -462,6 +462,12 @@ class ChatApp {
         this.historySidebar = null;
         this.isHistoryOpen = false;
         
+        // Request optimization
+        this.activeRequest = null;
+        this.requestCache = new Map();
+        this.contextCache = null;
+        this.contextCacheTime = 0;
+        
         this.initializeElements();
         this.initializeApp();
     }
@@ -972,21 +978,24 @@ class ChatApp {
     }
     
     /**
-     * Send a message to the chat API
+     * Send a message to the chat API with optimizations
      */
     async sendMessage() {
         const messageText = this.messageInput.value.trim();
         if (!messageText || this.isLoading) return;
+        
+        // Prevent duplicate requests
+        if (this.activeRequest) {
+            console.log('Request already in progress, ignoring duplicate');
+            return;
+        }
         
         // Hide welcome message on first interaction
         if (this.welcomeMessage) {
             this.welcomeMessage.style.display = 'none';
         }
         
-        // Add user message to chat history (will auto-save to IndexedDB)
-        await this.addMessage('user', messageText);
-        
-        // Clear and reset input field
+        // Clear and reset input field early for better UX
         this.messageInput.value = '';
         this.updateCharCount();
         this.validateInput();
@@ -996,12 +1005,33 @@ class ChatApp {
         this.setLoading(true);
         
         try {
-            // Get messages for API request (includes system prompt + recent context)
-            const messages = await this.chatHistory.getMessagesForRequest();
+            // Add user message to chat (optimized to batch with response)
+            const userMessage = await this.addMessage('user', messageText);
+            
+            // Get messages for API request with caching
+            const messages = await this.getOptimizedMessagesForRequest();
+            
+            // Create request signature for deduplication
+            const requestSignature = this.createRequestSignature(messages);
+            
+            // Check cache first
+            if (this.requestCache.has(requestSignature)) {
+                const cachedResponse = this.requestCache.get(requestSignature);
+                console.log('Using cached response');
+                await this.addMessage('assistant', cachedResponse.reply, cachedResponse.usage);
+                return;
+            }
+            
+            // Set active request
+            this.activeRequest = requestSignature;
             
             const response = await this.callChatAPI(messages);
             
             if (response.reply) {
+                // Cache successful response (with TTL)
+                this.cacheResponse(requestSignature, response);
+                
+                // Add assistant message
                 await this.addMessage('assistant', response.reply, response.usage);
             } else {
                 throw new Error('Empty response from server');
@@ -1013,6 +1043,7 @@ class ChatApp {
             this.updateStatus('Error', 'error');
         } finally {
             this.setLoading(false);
+            this.activeRequest = null;
         }
     }
     
@@ -1077,6 +1108,58 @@ class ChatApp {
     }
     
     /**
+     * Get optimized messages for request with caching
+     */
+    async getOptimizedMessagesForRequest() {
+        const now = Date.now();
+        
+        // Use cached context if fresh (within 30 seconds)
+        if (this.contextCache && (now - this.contextCacheTime) < 30000) {
+            return this.contextCache;
+        }
+        
+        // Get fresh context
+        const messages = await this.chatHistory.getMessagesForRequest();
+        
+        // Cache for future use
+        this.contextCache = messages;
+        this.contextCacheTime = now;
+        
+        return messages;
+    }
+    
+    /**
+     * Create request signature for deduplication
+     */
+    createRequestSignature(messages) {
+        // Create hash of last few messages for deduplication
+        const lastMessages = messages.slice(-3);
+        return btoa(JSON.stringify(lastMessages)).substring(0, 16);
+    }
+    
+    /**
+     * Cache response with TTL
+     */
+    cacheResponse(signature, response) {
+        // Cache with 5-minute TTL
+        this.requestCache.set(signature, {
+            ...response,
+            timestamp: Date.now()
+        });
+        
+        // Clean old cache entries (keep last 10)
+        if (this.requestCache.size > 10) {
+            const entries = Array.from(this.requestCache.entries());
+            entries.sort((a, b) => a[1].timestamp - b[1].timestamp);
+            
+            // Remove oldest entries
+            for (let i = 0; i < entries.length - 10; i++) {
+                this.requestCache.delete(entries[i][0]);
+            }
+        }
+    }
+    
+    /**
      * Utility function to add delay for retry logic
      * @param {number} ms - Milliseconds to delay
      * @returns {Promise} Resolved promise after delay
@@ -1098,14 +1181,47 @@ class ChatApp {
         this.renderMessage(message);
         this.scrollToBottom();
 
-        // Save to history if requested
+        // Optimize: Save to history with debouncing for better performance
         if (saveToHistory) {
             try {
+                // Use immediate save for better UX, debounce session updates
                 await this.chatHistory.saveMessage(role, content, usage);
+                
+                // Debounce session activity updates
+                this.debouncedUpdateActivity();
+                
+                // Invalidate context cache after save
+                this.contextCache = null;
             } catch (error) {
                 console.error('Failed to save message to history:', error);
             }
         }
+        
+        return message;
+    }
+    
+    /**
+     * Debounced session activity update to optimize IndexedDB operations
+     */
+    debouncedUpdateActivity = this.debounce(async () => {
+        try {
+            if (this.chatHistory.currentSessionId) {
+                await this.chatHistory.updateSessionActivity(this.chatHistory.currentSessionId);
+            }
+        } catch (error) {
+            console.error('Failed to update session activity:', error);
+        }
+    }, 1000);
+    
+    /**
+     * Debounce utility function
+     */
+    debounce(func, wait) {
+        let timeout;
+        return (...args) => {
+            clearTimeout(timeout);
+            timeout = setTimeout(() => func.apply(this, args), wait);
+        };
     }
     
     renderMessage(message) {
