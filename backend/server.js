@@ -62,6 +62,12 @@ app.use(cors({
 app.use(express.json({ limit: '10mb' }));
 
 /**
+ * Serve static files from the frontend directory
+ */
+const path = require('path');
+app.use(express.static(path.join(__dirname, '../frontend')));
+
+/**
  * Request logging middleware
  * Logs all incoming requests with timestamp and method
  */
@@ -222,6 +228,33 @@ app.post('/api/chat', async (req, res) => {
 });
 
 /**
+ * Server Configuration Endpoint
+ * Returns the current server configuration for frontend
+ * 
+ * @route GET /config
+ * @returns {Object} Server configuration including ports and URLs
+ */
+app.get('/config', (req, res) => {
+  const port = process.server ? process.server.address().port : PORT;
+  res.json({
+    port: port,
+    baseUrl: `http://localhost:${port}`,
+    apiUrl: `http://localhost:${port}/api/chat`,
+    healthUrl: `http://localhost:${port}/health`,
+    timestamp: new Date().toISOString()
+  });
+});
+
+/**
+ * Serve the main frontend application
+ * @route GET /
+ * @returns {HTML} The main index.html file
+ */
+app.get('/', (req, res) => {
+  res.sendFile(path.join(__dirname, '../frontend/index.html'));
+});
+
+/**
  * Global error handling middleware
  * Catches any unhandled errors in the application
  */
@@ -241,7 +274,9 @@ app.use((req, res) => {
   res.status(404).json({
     error: 'Endpoint not found',
     available_endpoints: [
+      'GET /',
       'GET /health',
+      'GET /config',
       'POST /api/chat'
     ]
   });
@@ -446,6 +481,24 @@ async function startServer(port) {
   }
   
   const server = app.listen(port, () => {
+    // Write the actual port to a config file for frontend to read
+    const fs = require('fs');
+    const configPath = path.join(__dirname, '../frontend/server-config.json');
+    const config = {
+      port: port,
+      baseUrl: `http://localhost:${port}`,
+      apiUrl: `http://localhost:${port}/api/chat`,
+      healthUrl: `http://localhost:${port}/health`,
+      timestamp: new Date().toISOString()
+    };
+    
+    try {
+      fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
+      console.log(`Server configuration written to: ${configPath}`);
+    } catch (error) {
+      console.warn('Failed to write server config file:', error.message);
+    }
+    
     console.log('');
     console.log('='.repeat(60));
     console.log(`  Kimi-K2 Chatbot Backend running on port ${port}`);
@@ -467,7 +520,7 @@ async function startServer(port) {
   server.on('error', (err) => {
     if (err.code === 'EADDRINUSE') {
       console.log(`Port ${port} is already in use. Trying port ${port + 1}...`);
-      startServer(port + 1);
+      return startServer(port + 1);
     } else {
       console.error('Server error:', err);
       process.exit(1);

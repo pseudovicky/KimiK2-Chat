@@ -18,14 +18,14 @@ class ChatApp {
     constructor() {
         this.messages = [];
         this.isLoading = false;
-        this.apiUrl = 'http://localhost:3001/api/chat';
-        this.healthUrl = 'http://localhost:3001/health';
+        this.apiUrl = null;
+        this.healthUrl = null;
         this.maxRetries = 3;
         this.retryDelay = 1000;
         
         this.initializeElements();
         this.bindEvents();
-        this.checkBackendStatus();
+        this.initializeServerConfig();
         this.initializeTemplates();
     }
     
@@ -77,6 +77,41 @@ class ChatApp {
                 this.useTemplate(template);
             });
         });
+    }
+    
+    /**
+     * Initialize server configuration by detecting the backend port
+     */
+    async initializeServerConfig() {
+        // Try to detect the server configuration
+        const possiblePorts = [3000, 3001, 3002, 3003, 3004, 3005];
+        
+        for (const port of possiblePorts) {
+            try {
+                const configUrl = `http://localhost:${port}/config`;
+                const response = await fetch(configUrl, { timeout: 2000 });
+                
+                if (response.ok) {
+                    const config = await response.json();
+                    this.apiUrl = config.apiUrl;
+                    this.healthUrl = config.healthUrl;
+                    console.log(`Connected to backend on port ${config.port}`);
+                    
+                    // Update status and check backend health
+                    this.checkBackendStatus();
+                    return;
+                }
+            } catch (error) {
+                // Continue trying other ports
+                continue;
+            }
+        }
+        
+        // Fallback: use default URLs and show warning
+        console.warn('Could not detect backend server. Using default configuration.');
+        this.apiUrl = 'http://localhost:3000/api/chat';
+        this.healthUrl = 'http://localhost:3000/health';
+        this.updateStatus('Backend Not Found', 'error');
     }
     
     /**
@@ -590,6 +625,8 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 // Service worker for offline functionality (optional future enhancement)
+// Disabled for now to avoid 404 errors
+/*
 if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => {
         navigator.serviceWorker.register('/sw.js')
@@ -601,3 +638,4 @@ if ('serviceWorker' in navigator) {
             });
     });
 }
+*/
