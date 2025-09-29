@@ -768,3 +768,313 @@ body {
         min-width: 80px;
     }
 }
+
+/* History Sidebar Styles */
+.history-sidebar {
+    position: fixed;
+    top: 0;
+    left: -400px;
+    width: 400px;
+    height: 100vh;
+    background: rgba(255, 255, 255, 0.95);
+    backdrop-filter: blur(10px);
+    border-right: 1px solid rgba(255, 255, 255, 0.3);
+    box-shadow: 2px 0 20px rgba(0, 0, 0, 0.1);
+    transition: left 0.3s ease;
+    z-index: 1000;
+    display: flex;
+    flex-direction: column;
+}
+
+.history-sidebar.open {
+    left: 0;
+}
+
+.history-header {
+    padding: 1.5rem;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.3);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: rgba(255, 255, 255, 0.1);
+}
+
+.history-header h3 {
+    margin: 0;
+    font-size: 1.2rem;
+    color: #333;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.history-controls {
+    display: flex;
+    gap: 0.5rem;
+}
+
+.new-session-btn,
+.close-history-btn {
+    background: rgba(255, 255, 255, 0.2);
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    border-radius: 8px;
+    padding: 0.5rem;
+    color: #333;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    width: 36px;
+    height: 36px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.new-session-btn:hover,
+.close-history-btn:hover {
+    background: rgba(255, 255, 255, 0.3);
+    transform: translateY(-1px);
+}
+
+.history-search {
+    padding: 1rem 1.5rem;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.3);
+    position: relative;
+}
+
+.history-search input {
+    width: 100%;
+    padding: 0.75rem 2.5rem 0.75rem 1rem;
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.2);
+    color: #333;
+    font-size: 0.9rem;
+    transition: all 0.2s ease;
+}
+
+.history-search input:focus {
+    outline: none;
+    border-color: #667eea;
+    background: rgba(255, 255, 255, 0.3);
+}
+
+.history-search input::placeholder {
+    color: #666;
+}
+
+.history-search i {
+    position: absolute;
+    right: 2rem;
+    top: 50%;
+    transform: translateY(-50%);
+    color: #666;
+    pointer-events: none;
+}
+
+.history-list {
+    flex: 1;
+    overflow-y: auto;
+    padding: 0.5rem 0;
+}
+
+.session-item {
+    padding: 1rem 1.5rem;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    position: relative;
+}
+
+.session-item:hover {
+    background: rgba(255, 255, 255, 0.1);
+}
+
+.session-item.active {
+    background: rgba(102, 126, 234, 0.2);
+    border-left: 4px solid #667eea;
+}
+
+.session-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.session-title {
+    font-weight: 500;
+    color: #333;
+    margin-bottom: 0.25rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.session-meta {
+    display: flex;
+    gap: 1rem;
+    font-size: 0.8rem;
+    color: #666;
+}
+
+.session-actions {
+    display: flex;
+    gap: 0.25rem;
+    opacity: 0;
+    transition: opacity 0.2s ease;
+}
+
+.session-item:hover .session-actions {
+    opacity: 1;
+}
+
+.session-action {
+    background: none;
+    border: none;
+    padding: 0.25rem;
+    border-radius: 4px;
+    color: #666;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    width: 24px;
+    height: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.session-action:hover {
+    background: rgba(255, 255, 255, 0.2);
+    color: #333;
+}
+
+.delete-session:hover {
+    color: #e74c3c;
+}
+
+.no-sessions {
+    padding: 2rem 1.5rem;
+    text-align: center;
+    color: #666;
+    font-style: italic;
+}
+
+/* History Button Styles */
+.history-btn {
+    background: rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 8px;
+    padding: 0.5rem 1rem;
+    color: white;
+    font-size: 0.9rem;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.history-btn:hover {
+    background: rgba(255, 255, 255, 0.2);
+    transform: translateY(-1px);
+}
+
+/* Dark theme adjustments */
+[data-theme="dark"] .history-sidebar {
+    background: rgba(30, 30, 35, 0.95);
+    border-right-color: rgba(255, 255, 255, 0.1);
+}
+
+[data-theme="dark"] .history-header {
+    background: rgba(255, 255, 255, 0.05);
+    border-bottom-color: rgba(255, 255, 255, 0.1);
+}
+
+[data-theme="dark"] .history-header h3 {
+    color: #e0e0e0;
+}
+
+[data-theme="dark"] .new-session-btn,
+[data-theme="dark"] .close-history-btn {
+    background: rgba(255, 255, 255, 0.1);
+    border-color: rgba(255, 255, 255, 0.2);
+    color: #e0e0e0;
+}
+
+[data-theme="dark"] .new-session-btn:hover,
+[data-theme="dark"] .close-history-btn:hover {
+    background: rgba(255, 255, 255, 0.2);
+}
+
+[data-theme="dark"] .history-search {
+    border-bottom-color: rgba(255, 255, 255, 0.1);
+}
+
+[data-theme="dark"] .history-search input {
+    background: rgba(255, 255, 255, 0.1);
+    border-color: rgba(255, 255, 255, 0.2);
+    color: #e0e0e0;
+}
+
+[data-theme="dark"] .history-search input:focus {
+    background: rgba(255, 255, 255, 0.15);
+    border-color: #667eea;
+}
+
+[data-theme="dark"] .history-search input::placeholder {
+    color: #999;
+}
+
+[data-theme="dark"] .history-search i {
+    color: #999;
+}
+
+[data-theme="dark"] .session-item {
+    border-bottom-color: rgba(255, 255, 255, 0.05);
+}
+
+[data-theme="dark"] .session-item:hover {
+    background: rgba(255, 255, 255, 0.05);
+}
+
+[data-theme="dark"] .session-item.active {
+    background: rgba(102, 126, 234, 0.3);
+}
+
+[data-theme="dark"] .session-title {
+    color: #e0e0e0;
+}
+
+[data-theme="dark"] .session-meta {
+    color: #999;
+}
+
+[data-theme="dark"] .session-action {
+    color: #999;
+}
+
+[data-theme="dark"] .session-action:hover {
+    background: rgba(255, 255, 255, 0.1);
+    color: #e0e0e0;
+}
+
+[data-theme="dark"] .delete-session:hover {
+    color: #e74c3c;
+}
+
+[data-theme="dark"] .no-sessions {
+    color: #999;
+}
+
+/* Mobile responsive adjustments */
+@media (max-width: 768px) {
+    .history-sidebar {
+        width: 100vw;
+        left: -100vw;
+    }
+    
+    .history-sidebar.open {
+        left: 0;
+    }
+}

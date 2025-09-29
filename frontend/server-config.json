@@ -1,7 +1,7 @@
 {
-  "port": 3002,
-  "baseUrl": "http://localhost:3002",
-  "apiUrl": "http://localhost:3002/api/chat",
-  "healthUrl": "http://localhost:3002/health",
-  "timestamp": "2025-09-29T19:10:18.353Z"
+  "port": 3001,
+  "baseUrl": "http://localhost:3001",
+  "apiUrl": "http://localhost:3001/api/chat",
+  "healthUrl": "http://localhost:3001/health",
+  "timestamp": "2025-09-29T20:26:38.191Z"
 }

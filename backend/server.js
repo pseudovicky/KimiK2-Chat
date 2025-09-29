@@ -161,7 +161,7 @@ app.post('/api/chat', async (req, res) => {
     // Make request to Ollama with timing
     const startTime = Date.now();
     const response = await axios.post(`${OLLAMA_HOST}/api/chat`, ollamaRequest, {
-      timeout: 30000, // 30 second timeout
+      timeout: 120000, // 120 second timeout (2 minutes) for complex queries
       headers: {
         'Content-Type': 'application/json'
       }
@@ -216,7 +216,7 @@ app.post('/api/chat', async (req, res) => {
     if (error.code === 'ETIMEDOUT') {
       return res.status(408).json({
         error: 'Request timeout. The model took too long to respond.',
-        details: 'Request timed out after 30 seconds'
+        details: 'Request timed out after 120 seconds'
       });
     }
     
