@@ -26,7 +26,6 @@ class ChatApp {
         this.initializeElements();
         this.bindEvents();
         this.initializeServerConfig();
-        this.initializeTemplates();
     }
     
     /**
@@ -41,8 +40,6 @@ class ChatApp {
         this.welcomeMessage = document.getElementById('welcome-message');
         this.statusIndicator = document.getElementById('status-indicator');
         this.errorModal = document.getElementById('error-modal');
-        this.templatesContent = document.getElementById('templates-content');
-        this.toggleIcon = document.getElementById('toggle-icon');
     }
     
     /**
@@ -69,14 +66,6 @@ class ChatApp {
             this.validateInput();
             this.autoResize();
         });
-        
-        // Template button handlers
-        document.querySelectorAll('.template-btn').forEach(btn => {
-            btn.addEventListener('click', () => {
-                const template = btn.dataset.template;
-                this.useTemplate(template);
-            });
-        });
     }
     
     /**
@@ -89,7 +78,15 @@ class ChatApp {
         for (const port of possiblePorts) {
             try {
                 const configUrl = `http://localhost:${port}/config`;
-                const response = await fetch(configUrl, { timeout: 2000 });
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), 2000);
+                
+                const response = await fetch(configUrl, { 
+                    signal: controller.signal,
+                    method: 'GET'
+                });
+                
+                clearTimeout(timeoutId);
                 
                 if (response.ok) {
                     const config = await response.json();
@@ -103,6 +100,7 @@ class ChatApp {
                 }
             } catch (error) {
                 // Continue trying other ports
+                console.log(`Failed to connect to port ${port}:`, error.message);
                 continue;
             }
         }
@@ -112,38 +110,6 @@ class ChatApp {
         this.apiUrl = 'http://localhost:3000/api/chat';
         this.healthUrl = 'http://localhost:3000/health';
         this.updateStatus('Backend Not Found', 'error');
-    }
-    
-    /**
-     * Initialize prompt templates for quick access
-     */
-    initializeTemplates() {
-        this.templates = {
-            'generate-function': {
-                prompt: "Generate a JavaScript function that",
-                placeholder: "describes what the function should do"
-            },
-            'debug-code': {
-                prompt: "Please help me debug this code and fix any issues:\n\n```\n",
-                placeholder: "paste your code here"
-            },
-            'explain-code': {
-                prompt: "Please explain what this code does and how it works:\n\n```\n",
-                placeholder: "paste your code here"
-            },
-            'optimize-code': {
-                prompt: "Please optimize this code for better performance and readability:\n\n```\n",
-                placeholder: "paste your code here"
-            },
-            'write-tests': {
-                prompt: "Write comprehensive unit tests for this code:\n\n```\n",
-                placeholder: "paste your code here"
-            },
-            'refactor-code': {
-                prompt: "Please refactor this code to improve its structure and maintainability:\n\n```\n",
-                placeholder: "paste your code here"
-            }
-        };
     }
     
     /**
@@ -225,33 +191,6 @@ class ChatApp {
             default:
                 statusDot.style.background = '#27ae60';
         }
-    }
-    
-    /**
-     * Apply a prompt template to the input field
-     * @param {string} templateKey - Key of the template to use
-     */
-    useTemplate(templateKey) {
-        const template = this.templates[templateKey];
-        if (!template) return;
-        
-        this.messageInput.value = template.prompt;
-        this.messageInput.focus();
-        
-        // Position cursor for user input
-        if (template.prompt.includes('```')) {
-            const cursorPosition = template.prompt.indexOf('```') + 3;
-            this.messageInput.setSelectionRange(cursorPosition, cursorPosition);
-        } else {
-            this.messageInput.setSelectionRange(template.prompt.length, template.prompt.length);
-        }
-        
-        this.updateCharCount();
-        this.validateInput();
-        this.autoResize();
-        
-        // Collapse templates after selection
-        this.toggleTemplates(false);
     }
     
     /**
@@ -409,17 +348,48 @@ class ChatApp {
     }
     
     formatContent(content) {
-        // Convert markdown-style code blocks to HTML
+        // Store code blocks to protect them from other processing
+        const codeBlocks = [];
         content = content.replace(/```(\w+)?\n([\s\S]*?)```/g, (match, language, code) => {
             const lang = language || 'javascript';
-            return `<pre><code class="language-${lang}">${this.escapeHtml(code.trim())}</code></pre>`;
+            const placeholder = `__CODE_BLOCK_${codeBlocks.length}__`;
+            codeBlocks.push(`<pre><code class="language-${lang}">${this.escapeHtml(code.trim())}</code></pre>`);
+            return placeholder;
         });
         
-        // Convert inline code
-        content = content.replace(/`([^`]+)`/g, '<code>$1</code>');
+        // Store inline code to protect it
+        const inlineCodes = [];
+        content = content.replace(/`([^`]+)`/g, (match, code) => {
+            const placeholder = `__INLINE_CODE_${inlineCodes.length}__`;
+            inlineCodes.push(`<code>${this.escapeHtml(code)}</code>`);
+            return placeholder;
+        });
         
-        // Convert line breaks
-        content = content.replace(/\n/g, '<br>');
+        // Process tables
+        content = this.formatTables(content);
+        
+        // Process headers (h1-h6)
+        content = content.replace(/^(#{1,6})\s+(.+)$/gm, (match, hashes, text) => {
+            const level = hashes.length;
+            return `<h${level}>${text.trim()}</h${level}>`;
+        });
+        
+        // Process unordered lists
+        content = this.formatLists(content);
+        
+        // Process blockquotes
+        content = content.replace(/^>\s+(.+)$/gm, '<blockquote>$1</blockquote>');
+        
+        // Process horizontal rules
+        content = content.replace(/^[-*_]{3,}$/gm, '<hr>');
+        
+        // Process bold and italic text
+        content = content.replace(/\*\*\*(.+?)\*\*\*/g, '<strong><em>$1</em></strong>');
+        content = content.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+        content = content.replace(/\*(.+?)\*/g, '<em>$1</em>');
+        
+        // Process strikethrough
+        content = content.replace(/~~(.+?)~~/g, '<del>$1</del>');
         
         // Convert URLs to links
         content = content.replace(
@@ -427,7 +397,173 @@ class ChatApp {
             '<a href="$1" target="_blank" rel="noopener noreferrer">$1</a>'
         );
         
+        // Process paragraphs and line breaks
+        content = this.formatParagraphs(content);
+        
+        // Restore code blocks
+        codeBlocks.forEach((block, index) => {
+            content = content.replace(`__CODE_BLOCK_${index}__`, block);
+        });
+        
+        // Restore inline codes
+        inlineCodes.forEach((code, index) => {
+            content = content.replace(`__INLINE_CODE_${index}__`, code);
+        });
+        
         return content;
+    }
+    
+    formatTables(content) {
+        const lines = content.split('\n');
+        const result = [];
+        let inTable = false;
+        let tableRows = [];
+        
+        for (let i = 0; i < lines.length; i++) {
+            const line = lines[i].trim();
+            
+            // Check if this line looks like a table row
+            if (line.includes('|') && line.split('|').length > 2) {
+                if (!inTable) {
+                    inTable = true;
+                    tableRows = [];
+                }
+                tableRows.push(line);
+            } else {
+                // If we were in a table, process it
+                if (inTable) {
+                    result.push(this.processTable(tableRows));
+                    tableRows = [];
+                    inTable = false;
+                }
+                result.push(line);
+            }
+        }
+        
+        // Handle table at end of content
+        if (inTable && tableRows.length > 0) {
+            result.push(this.processTable(tableRows));
+        }
+        
+        return result.join('\n');
+    }
+    
+    processTable(rows) {
+        if (rows.length < 2) return rows.join('\n');
+        
+        let table = '<table class="markdown-table">';
+        
+        // Process header row
+        const headerCells = rows[0].split('|').map(cell => cell.trim()).filter(cell => cell);
+        table += '<thead><tr>';
+        headerCells.forEach(cell => {
+            table += `<th>${cell}</th>`;
+        });
+        table += '</tr></thead>';
+        
+        // Skip separator row (usually contains dashes)
+        const dataRows = rows.slice(2);
+        
+        if (dataRows.length > 0) {
+            table += '<tbody>';
+            dataRows.forEach(row => {
+                const cells = row.split('|').map(cell => cell.trim()).filter(cell => cell);
+                table += '<tr>';
+                cells.forEach(cell => {
+                    table += `<td>${cell}</td>`;
+                });
+                table += '</tr>';
+            });
+            table += '</tbody>';
+        }
+        
+        table += '</table>';
+        return table;
+    }
+    
+    formatLists(content) {
+        const lines = content.split('\n');
+        const result = [];
+        let inList = false;
+        let listItems = [];
+        let listType = null; // 'ul' or 'ol'
+        
+        for (let i = 0; i < lines.length; i++) {
+            const line = lines[i];
+            const trimmed = line.trim();
+            
+            // Check for unordered list items
+            if (trimmed.match(/^[-*+]\s+(.+)/)) {
+                if (!inList || listType !== 'ul') {
+                    if (inList) {
+                        result.push(this.processListItems(listItems, listType));
+                    }
+                    inList = true;
+                    listType = 'ul';
+                    listItems = [];
+                }
+                const content = trimmed.replace(/^[-*+]\s+/, '');
+                listItems.push(content);
+            }
+            // Check for ordered list items
+            else if (trimmed.match(/^\d+\.\s+(.+)/)) {
+                if (!inList || listType !== 'ol') {
+                    if (inList) {
+                        result.push(this.processListItems(listItems, listType));
+                    }
+                    inList = true;
+                    listType = 'ol';
+                    listItems = [];
+                }
+                const content = trimmed.replace(/^\d+\.\s+/, '');
+                listItems.push(content);
+            }
+            else {
+                if (inList) {
+                    result.push(this.processListItems(listItems, listType));
+                    inList = false;
+                    listItems = [];
+                    listType = null;
+                }
+                result.push(line);
+            }
+        }
+        
+        // Handle list at end of content
+        if (inList && listItems.length > 0) {
+            result.push(this.processListItems(listItems, listType));
+        }
+        
+        return result.join('\n');
+    }
+    
+    processListItems(items, type) {
+        const tag = type === 'ol' ? 'ol' : 'ul';
+        let list = `<${tag} class="markdown-list">`;
+        items.forEach(item => {
+            list += `<li>${item}</li>`;
+        });
+        list += `</${tag}>`;
+        return list;
+    }
+    
+    formatParagraphs(content) {
+        // Split content into paragraphs (double line breaks)
+        const paragraphs = content.split(/\n\s*\n/);
+        
+        return paragraphs.map(para => {
+            const trimmed = para.trim();
+            if (!trimmed) return '';
+            
+            // Don't wrap if it's already a block element
+            if (trimmed.match(/^<(h[1-6]|table|ul|ol|blockquote|pre|hr)/)) {
+                return trimmed;
+            }
+            
+            // Replace single line breaks with <br> within paragraphs
+            const withBreaks = trimmed.replace(/\n/g, '<br>');
+            return `<p>${withBreaks}</p>`;
+        }).filter(p => p).join('\n\n');
     }
     
     escapeHtml(text) {
@@ -481,28 +617,6 @@ class ChatApp {
 }
 
 /**
- * Template toggle functionality
- * @param {boolean|null} forceState - Force expand (true) or collapse (false), or toggle if null
- */
-function toggleTemplates(forceState = null) {
-    const content = document.getElementById('templates-content');
-    const icon = document.getElementById('toggle-icon');
-    
-    if (forceState !== null) {
-        if (forceState) {
-            content.classList.add('expanded');
-            icon.classList.add('rotated');
-        } else {
-            content.classList.remove('expanded');
-            icon.classList.remove('rotated');
-        }
-    } else {
-        content.classList.toggle('expanded');
-        icon.classList.toggle('rotated');
-    }
-}
-
-/**
  * Close the error modal
  */
 function closeErrorModal() {
@@ -548,9 +662,6 @@ document.addEventListener('click', (e) => {
 document.addEventListener('DOMContentLoaded', () => {
     // Initialize the chat application
     window.chatApp = new ChatApp();
-    
-    // Set initial template state
-    toggleTemplates(true);
     
     // Focus input field
     document.getElementById('message-input').focus();
@@ -614,9 +725,6 @@ document.addEventListener('click', (e) => {
 document.addEventListener('DOMContentLoaded', () => {
     // Initialize the chat app
     window.chatApp = new ChatApp();
-    
-    // Initialize templates as collapsed
-    toggleTemplates(true);
     
     // Focus input on load
     document.getElementById('message-input').focus();

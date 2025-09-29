@@ -25,8 +25,9 @@ const MODEL_NAME = process.env.MODEL_NAME || 'kimi-k2:1t-cloud';
 const AUTO_START_OLLAMA = process.env.AUTO_START_OLLAMA !== 'false'; // Default to true
 const MAX_OLLAMA_WAIT_TIME = 30000; // 30 seconds
 
-// Global variables for Ollama process management
+// Global variables for Ollama process management and server info
 let ollamaProcess = null;
+let currentServerPort = PORT;
 
 /**
  * Global error handlers for uncaught exceptions and unhandled rejections
@@ -235,14 +236,21 @@ app.post('/api/chat', async (req, res) => {
  * @returns {Object} Server configuration including ports and URLs
  */
 app.get('/config', (req, res) => {
-  const port = process.server ? process.server.address().port : PORT;
-  res.json({
-    port: port,
-    baseUrl: `http://localhost:${port}`,
-    apiUrl: `http://localhost:${port}/api/chat`,
-    healthUrl: `http://localhost:${port}/health`,
-    timestamp: new Date().toISOString()
-  });
+  try {
+    res.json({
+      port: currentServerPort,
+      baseUrl: `http://localhost:${currentServerPort}`,
+      apiUrl: `http://localhost:${currentServerPort}/api/chat`,
+      healthUrl: `http://localhost:${currentServerPort}/health`,
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error('Error in /config endpoint:', error);
+    res.status(500).json({
+      error: 'Unable to get server configuration',
+      timestamp: new Date().toISOString()
+    });
+  }
 });
 
 /**
@@ -481,6 +489,9 @@ async function startServer(port) {
   }
   
   const server = app.listen(port, () => {
+    // Update the global server port variable
+    currentServerPort = port;
+    
     // Write the actual port to a config file for frontend to read
     const fs = require('fs');
     const configPath = path.join(__dirname, '../frontend/server-config.json');
