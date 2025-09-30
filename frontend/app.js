@@ -487,7 +487,7 @@ class ChatApp {
             await this.chatHistory.createSession();
         } else {
             // Load the most recent session
-            const latestSession = this.chatHistory.sessions[0];
+            const latestSession = this.chatHistory.sessions;
             await this.loadSession(latestSession.id);
         }
         
@@ -856,7 +856,7 @@ class ChatApp {
      */
     async initializeServerConfig() {
         // Try to detect the server configuration
-        const possiblePorts = [3000, 3001, 3002, 3003, 3004, 3005];
+        const possiblePorts =[3000, 3001, 3002];
         
         for (const port of possiblePorts) {
             try {
@@ -1134,7 +1134,10 @@ class ChatApp {
     createRequestSignature(messages) {
         // Create hash of last few messages for deduplication
         const lastMessages = messages.slice(-3);
-        return btoa(JSON.stringify(lastMessages)).substring(0, 16);
+        const jsonString = JSON.stringify(lastMessages);
+        // Escape multi-byte characters and then re-encode as binary string
+        const binaryString = unescape(encodeURIComponent(jsonString));
+        return btoa(binaryString).substring(0, 16);
     }
     
     /**
@@ -1150,11 +1153,11 @@ class ChatApp {
         // Clean old cache entries (keep last 10)
         if (this.requestCache.size > 10) {
             const entries = Array.from(this.requestCache.entries());
-            entries.sort((a, b) => a[1].timestamp - b[1].timestamp);
+            entries.sort((a, b) => a.timestamp - b.timestamp);
             
             // Remove oldest entries
             for (let i = 0; i < entries.length - 10; i++) {
-                this.requestCache.delete(entries[i][0]);
+                this.requestCache.delete(entries[i]);
             }
         }
     }
@@ -1369,33 +1372,41 @@ class ChatApp {
     
     processTable(rows) {
         if (rows.length < 2) return rows.join('\n');
-        
+
+        // Basic validation for a markdown table separator row
+        if (!rows[1] || !rows[1].includes('-')) {
+            return rows.join('\n');
+        }
+
         let table = '<table class="markdown-table">';
-        
+
         // Process header row
-        const headerCells = rows[0].split('|').map(cell => cell.trim()).filter(cell => cell);
+        const headerCells = rows[0].split('|').slice(1, -1).map(cell => cell.trim());
         table += '<thead><tr>';
         headerCells.forEach(cell => {
-            table += `<th>${cell}</th>`;
+            table += `<th>${this.escapeHtml(cell)}</th>`;
         });
         table += '</tr></thead>';
-        
-        // Skip separator row (usually contains dashes)
+
+        // Process data rows, skipping separator
         const dataRows = rows.slice(2);
-        
+
         if (dataRows.length > 0) {
             table += '<tbody>';
             dataRows.forEach(row => {
-                const cells = row.split('|').map(cell => cell.trim()).filter(cell => cell);
-                table += '<tr>';
-                cells.forEach(cell => {
-                    table += `<td>${cell}</td>`;
-                });
-                table += '</tr>';
+                const cells = row.split('|').slice(1, -1).map(cell => cell.trim());
+                // Ensure row has same number of columns as header
+                if (cells.length === headerCells.length) {
+                    table += '<tr>';
+                    cells.forEach(cell => {
+                        table += `<td>${this.escapeHtml(cell)}</td>`;
+                    });
+                    table += '</tr>';
+                }
             });
             table += '</tbody>';
         }
-        
+
         table += '</table>';
         return table;
     }
