@@ -47,6 +47,18 @@ This application provides a clean, modern interface for interacting with the Kim
 - **Node.js** (v18 or higher)
 - **Ollama** installed on your system
 
+### Installing Ollama
+
+Ollama must be installed and running for the backend to function.
+
+- **macOS & Windows**: Download from the [Ollama website](https://ollama.ai/).
+- **Linux**: Run the following command:
+  ```bash
+  curl -fsSL https://ollama.com/install.sh | sh
+  ```
+
+After installation, ensure the Ollama service is running. You can test this by opening a terminal and running `ollama --version`.
+
 ### Installation & Setup
 
 1. **Clone and Setup**

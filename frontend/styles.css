@@ -118,28 +118,34 @@ body {
     overflow: hidden;
 }
 
-/* Chat Container */
-.chat-container {
+.message-container {
     flex: 1;
     overflow-y: auto;
     padding: 1rem 2rem;
     scroll-behavior: smooth;
+    display: flex;
+    flex-direction: column;
 }
 
-.chat-container::-webkit-scrollbar {
+/* Chat Container */
+.chat-container {
+    flex: 1;
+}
+
+.message-container::-webkit-scrollbar {
     width: 6px;
 }
 
-.chat-container::-webkit-scrollbar-track {
+.message-container::-webkit-scrollbar-track {
     background: #f1f1f1;
 }
 
-.chat-container::-webkit-scrollbar-thumb {
+.message-container::-webkit-scrollbar-thumb {
     background: #c1c1c1;
     border-radius: 3px;
 }
 
-.chat-container::-webkit-scrollbar-thumb:hover {
+.message-container::-webkit-scrollbar-thumb:hover {
     background: #a1a1a1;
 }
 
@@ -388,22 +394,41 @@ body {
 }
 
 /* Lists */
-.message-content .markdown-list {
+.message-content ul.markdown-list,
+.message-content ol.markdown-list {
     margin: 1rem 0;
-    padding-left: 1.5rem;
+    padding-left: 0; /* Fully controlled indentation */
+    list-style: none; /* Disable all default list styling */
+}
+
+.message-content ol.markdown-list {
+    counter-reset: list-counter; /* Initialize the counter for ordered lists */
 }
 
 .message-content .markdown-list li {
+    display: flex; /* Use flexbox for robust alignment */
+    align-items: flex-start; /* Align text to the top of the marker */
     margin-bottom: 0.5rem;
     line-height: 1.6;
 }
 
-.message-content ul.markdown-list {
-    list-style-type: disc;
+.message-content .markdown-list li::before {
+    flex-shrink: 0; /* Prevent marker from shrinking */
+    width: 1.5em;     /* Consistent space for the marker */
+    font-weight: bold;
+    color: #2c3e50;
 }
 
-.message-content ol.markdown-list {
-    list-style-type: decimal;
+.message-content ul.markdown-list > li::before {
+    content: "•"; /* Use '•' for unordered lists */
+}
+
+.message-content ol.markdown-list > li {
+    counter-increment: list-counter; /* Increment counter on each <li> */
+}
+
+.message-content ol.markdown-list > li::before {
+    content: counter(list-counter) "."; /* Display counter for ordered lists */
 }
 
 .message-content .markdown-list li strong {

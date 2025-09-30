@@ -34,37 +34,38 @@
         </header>
 
         <!-- Main Chat Area -->
+        <!-- Main Chat Area -->
         <main class="chat-main">
-            
-            <!-- Chat Messages Container -->
-            <div class="chat-container" id="chat-container" role="log" aria-live="polite" aria-label="Chat messages">
-                <!-- Welcome Message -->
-                <div class="welcome-message" id="welcome-message">
-                    <div class="welcome-content">
-                        <i class="fas fa-robot welcome-icon" aria-hidden="true"></i>
-                        <h2>Welcome to Kimi-K2 Coding Copilot</h2>
-                        <p>Your AI-powered coding assistant. I can help you with:</p>
-                        <ul>
-                            <li><i class="fas fa-check" aria-hidden="true"></i> Generate code in any programming language</li>
-                            <li><i class="fas fa-check" aria-hidden="true"></i> Debug and fix existing code</li>
-                            <li><i class="fas fa-check" aria-hidden="true"></i> Explain complex algorithms and concepts</li>
-                            <li><i class="fas fa-check" aria-hidden="true"></i> Optimize and refactor your code</li>
-                            <li><i class="fas fa-check" aria-hidden="true"></i> Write comprehensive tests</li>
-                        </ul>
-                        <p class="welcome-footer">Get started by typing a message below.</p>
+            <div class="message-container">
+                <div class="chat-container" id="chat-container" role="log" aria-live="polite" aria-label="Chat messages">
+                    <!-- Welcome Message -->
+                    <div class="welcome-message" id="welcome-message">
+                        <div class="welcome-content">
+                            <i class="fas fa-robot welcome-icon" aria-hidden="true"></i>
+                            <h2>Welcome to Kimi-K2 Coding Copilot</h2>
+                            <p>Your AI-powered coding assistant. I can help you with:</p>
+                            <ul>
+                                <li><i class="fas fa-check" aria-hidden="true"></i> Generate code in any programming language</li>
+                                <li><i class="fas fa-check" aria-hidden="true"></i> Debug and fix existing code</li>
+                                <li><i class="fas fa-check" aria-hidden="true"></i> Explain complex algorithms and concepts</li>
+                                <li><i class="fas fa-check" aria-hidden="true"></i> Optimize and refactor your code</li>
+                                <li><i class="fas fa-check" aria-hidden="true"></i> Write comprehensive tests</li>
+                            </ul>
+                            <p class="welcome-footer">Get started by typing a message below.</p>
+                        </div>
                     </div>
                 </div>
-            </div>
 
-            <!-- Loading Indicator -->
-            <div class="loading-container" id="loading-container" style="display: none;" role="status" aria-label="Loading">
-                <div class="loading-message">
-                    <div class="typing-indicator" aria-hidden="true">
-                        <div class="typing-dot"></div>
-                        <div class="typing-dot"></div>
-                        <div class="typing-dot"></div>
+                <!-- Loading Indicator -->
+                <div class="loading-container" id="loading-container" style="display: none;" role="status" aria-label="Loading">
+                    <div class="loading-message">
+                        <div class="typing-indicator" aria-hidden="true">
+                            <div class="typing-dot"></div>
+                            <div class="typing-dot"></div>
+                            <div class="typing-dot"></div>
+                        </div>
+                        <span>Kimi-K2 is thinking...</span>
                     </div>
-                    <span>Kimi-K2 is thinking...</span>
                 </div>
             </div>
         </main>
