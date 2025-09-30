@@ -3,5 +3,5 @@
   "baseUrl": "http://localhost:3000",
   "apiUrl": "http://localhost:3000/api/chat",
   "healthUrl": "http://localhost:3000/health",
-  "timestamp": "2025-09-30T04:39:12.005Z"
+  "timestamp": "2025-09-30T12:15:09.880Z"
 }

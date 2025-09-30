@@ -284,18 +284,6 @@ app.get('/', (req, res) => {
 });
 
 /**
- * Global error handling middleware
- * Catches any unhandled errors in the application
- */
-app.use((err, req, res, next) => {
-  console.error('Unhandled error:', err);
-  res.status(500).json({
-    error: 'An unexpected error occurred',
-    details: process.env.NODE_ENV === 'development' ? err.message : 'Please try again later'
-  });
-});
-
-/**
  * 404 handler for undefined routes
  * Returns available endpoints for reference
  */
@@ -309,6 +297,18 @@ app.use((req, res) => {
       'POST /api/chat'
     ]
   });
+});
+
+/**
+ * Global error-handling middleware to catch unhandled errors.
+ * This should be the last middleware registered.
+ */
+app.use((err, req, res, next) => {
+  // Log the error to the console for debugging
+  console.error('Unhandled application error:', err);
+
+  // Send a JSON response with a 500 status code
+  res.status(500).json({ error: 'Internal Server Error' });
 });
 
 /**

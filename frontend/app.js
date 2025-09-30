@@ -1014,23 +1014,12 @@ class ChatApp {
             // Create request signature for deduplication
             const requestSignature = this.createRequestSignature(messages);
             
-            // Check cache first
-            if (this.requestCache.has(requestSignature)) {
-                const cachedResponse = this.requestCache.get(requestSignature);
-                console.log('Using cached response');
-                await this.addMessage('assistant', cachedResponse.reply, cachedResponse.usage);
-                return;
-            }
-            
             // Set active request
             this.activeRequest = requestSignature;
             
             const response = await this.callChatAPI(messages);
             
             if (response.reply) {
-                // Cache successful response (with TTL)
-                this.cacheResponse(requestSignature, response);
-                
                 // Add assistant message
                 await this.addMessage('assistant', response.reply, response.usage);
             } else {
@@ -1066,9 +1055,11 @@ class ChatApp {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
+                    'Cache-Control': 'no-cache',
                 },
                 body: JSON.stringify({ messages }),
-                signal: controller.signal
+                signal: controller.signal,
+                cache: 'no-cache'
             });
             
             clearTimeout(timeoutId);
@@ -1181,7 +1172,19 @@ class ChatApp {
         };
         
         this.messages.push(message);
-        this.renderMessage(message);
+        
+        const messageElement = this.renderMessage(message);
+
+        if (role === 'assistant') {
+            await this.streamMessageContent(messageElement, message, usage);
+        } else {
+            this.updateMessageContent(messageElement, message, usage);
+            // Highlight syntax for user-posted code blocks
+            if (window.Prism) {
+                Prism.highlightAllUnder(messageElement);
+            }
+        }
+        
         this.scrollToBottom();
 
         // Optimize: Save to history with debouncing for better performance
@@ -1231,24 +1234,30 @@ class ChatApp {
         const messageElement = document.createElement('div');
         messageElement.className = `message ${message.role}`;
         messageElement.setAttribute('data-message-id', message.id);
-        
+
+        this.chatContainer.appendChild(messageElement);
+
+        return messageElement;
+    }
+
+    updateMessageContent(messageElement, message, usage = null) {
         const avatar = message.role === 'user' ? '👤' : '🤖';
         const sender = message.role === 'user' ? 'You' : 'Kimi-K2';
         const timestamp = this.formatTime(message.timestamp);
-        
+
         let usageInfo = '';
-        if (message.usage) {
+        if (usage) {
             usageInfo = `
                 <div class="message-usage">
                     <small>
-                        Tokens: ${message.usage.total_tokens || 0} 
-                        (${message.usage.prompt_tokens || 0}+${message.usage.completion_tokens || 0})
-                        • Response time: ${message.usage.response_time_ms || 0}ms
+                        Tokens: ${usage.total_tokens || 0}
+                        (${usage.prompt_tokens || 0}+${usage.completion_tokens || 0})
+                        • Response time: ${usage.response_time_ms || 0}ms
                     </small>
                 </div>
             `;
         }
-        
+
         messageElement.innerHTML = `
             <div class="message-header">
                 <div class="message-avatar">${avatar}</div>
@@ -1260,10 +1269,63 @@ class ChatApp {
             </div>
             ${usageInfo}
         `;
+    }
+
+    async streamMessageContent(messageElement, message, usage = null) {
+        const avatar = message.role === 'user' ? '👤' : '🤖';
+        const sender = message.role === 'user' ? 'You' : 'Kimi-K2';
+        const timestamp = this.formatTime(message.timestamp);
+
+        // Initial render with empty content
+        messageElement.innerHTML = `
+            <div class="message-header">
+                <div class="message-avatar">${avatar}</div>
+                <div class="message-sender">${sender}</div>
+                <div class="message-timestamp">${timestamp}</div>
+            </div>
+            <div class="message-content"></div>
+        `;
+
+        const contentDiv = messageElement.querySelector('.message-content');
+        const formattedContent = this.formatContent(message.content);
         
-        this.chatContainer.appendChild(messageElement);
+        // This regex helps to split the content by words while preserving HTML tags
+        const tokens = formattedContent.split(/(\s+|&[a-z]+;|<[^>]+>)/g);
         
-        // Trigger syntax highlighting for code blocks
+        for (let i = 0; i < tokens.length; i++) {
+            const token = tokens[i];
+            
+            if (token.startsWith('<')) {
+                // If it's an HTML tag, append it instantly
+                contentDiv.innerHTML += token;
+            } else {
+                contentDiv.innerHTML += token;
+            }
+
+            this.scrollToBottom();
+
+            // Delay for typing effect
+            let delay = Math.random() * (120 - 50) + 50; // 50-120ms
+            if (token.endsWith(',')) delay = 180;
+            if (token.endsWith('.')) delay = 350;
+            await this.delay(delay);
+        }
+
+        // Render usage info after streaming is complete
+        if (usage) {
+            const usageInfo = `
+                <div class="message-usage">
+                    <small>
+                        Tokens: ${usage.total_tokens || 0}
+                        (${usage.prompt_tokens || 0}+${usage.completion_tokens || 0})
+                        • Response time: ${usage.response_time_ms || 0}ms
+                    </small>
+                </div>
+            `;
+            messageElement.innerHTML += usageInfo;
+        }
+
+        // Highlight syntax after streaming
         if (window.Prism) {
             Prism.highlightAllUnder(messageElement);
         }
@@ -1272,7 +1334,7 @@ class ChatApp {
     formatContent(content) {
         // Store code blocks to protect them from other processing
         const codeBlocks = [];
-        content = content.replace(/```(\w+)?\n([\s\S]*?)```/g, (match, language, code) => {
+        content = content.replace(/```(\w+)?\n?([\s\S]*?)```/g, (match, language, code) => {
             const lang = language || 'javascript';
             const placeholder = `__CODE_BLOCK_${codeBlocks.length}__`;
             codeBlocks.push(`<pre><code class="language-${lang}">${this.escapeHtml(code.trim())}</code></pre>`);
@@ -1293,10 +1355,16 @@ class ChatApp {
         // Process headers (h1-h6)
         content = content.replace(/^(#{1,6})\s+(.+)$/gm, (match, hashes, text) => {
             const level = hashes.length;
-            return `<h${level}>${text.trim()}</h${level}>`;
+            const contentText = text.trim();
+            // Heuristic to prevent formatting code as a header
+            if (/[<>{}\[\];()]/.test(contentText) || contentText.startsWith('include') || contentText.startsWith('define')) {
+                // Return as escaped text within a paragraph to avoid markdown processing
+                return `<p>${this.escapeHtml(match)}</p>`;
+            }
+            return `<h${level}>${contentText}</h${level}>`;
         });
         
-        // Process unordered lists
+        // Process lists
         content = this.formatLists(content);
         
         // Process blockquotes
@@ -1478,21 +1546,36 @@ class ChatApp {
     }
     
     formatParagraphs(content) {
-        // Split content into paragraphs (double line breaks)
         const paragraphs = content.split(/\n\s*\n/);
         
         return paragraphs.map(para => {
             const trimmed = para.trim();
             if (!trimmed) return '';
-            
-            // Don't wrap if it's already a block element
-            if (trimmed.match(/^<(h[1-6]|table|ul|ol|blockquote|pre|hr)/)) {
-                return trimmed;
+
+            // Regex to find the first HTML block-level element
+            const blockElementRegex = /<(h[1-6]|table|ul|ol|blockquote|pre|hr)/;
+            const match = trimmed.match(blockElementRegex);
+
+            // If a block element is found within the paragraph
+            if (match && match.index !== undefined) {
+                // Get the text before the first block element
+                const textBefore = trimmed.substring(0, match.index).trim();
+                const restOfContent = trimmed.substring(match.index);
+
+                // If there is text before the block element, wrap it in a <p> tag
+                if (textBefore) {
+                    const withBreaks = textBefore.replace(/\n/g, '<br>');
+                    return `<p>${withBreaks}</p>\n\n${restOfContent}`;
+                } else {
+                    // Otherwise, return the block element content as is
+                    return restOfContent;
+                }
             }
             
-            // Replace single line breaks with <br> within paragraphs
+            // If no block element is found, treat the whole chunk as a standard paragraph
             const withBreaks = trimmed.replace(/\n/g, '<br>');
             return `<p>${withBreaks}</p>`;
+
         }).filter(p => p).join('\n\n');
     }
     
