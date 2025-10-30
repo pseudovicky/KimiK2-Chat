@@ -1289,26 +1289,35 @@ class ChatApp {
         const contentDiv = messageElement.querySelector('.message-content');
         const formattedContent = this.formatContent(message.content);
         
-        // This regex helps to split the content by words while preserving HTML tags
-        const tokens = formattedContent.split(/(\s+|&[a-z]+;|<[^>]+>)/g);
+        // Check if content is already HTML-formatted
+        const htmlTagPattern = /<\/?[a-z][\s\S]*>/i;
+        const isHTMLFormatted = htmlTagPattern.test(formattedContent);
         
-        for (let i = 0; i < tokens.length; i++) {
-            const token = tokens[i];
+        if (isHTMLFormatted) {
+            // Content is HTML, render it directly without streaming animation
+            contentDiv.innerHTML = formattedContent;
+        } else {
+            // Content is plain text, use streaming animation
+            const tokens = formattedContent.split(/(\s+|&[a-z]+;|<[^>]+>)/g);
             
-            if (token.startsWith('<')) {
-                // If it's an HTML tag, append it instantly
-                contentDiv.innerHTML += token;
-            } else {
-                contentDiv.innerHTML += token;
+            for (let i = 0; i < tokens.length; i++) {
+                const token = tokens[i];
+                
+                if (token.startsWith('<')) {
+                    // If it's an HTML tag, append it instantly
+                    contentDiv.innerHTML += token;
+                } else {
+                    contentDiv.innerHTML += token;
+                }
+
+                this.scrollToBottom();
+
+                // Delay for typing effect
+                let delay = Math.random() * (120 - 50) + 50; // 50-120ms
+                if (token.endsWith(',')) delay = 180;
+                if (token.endsWith('.')) delay = 350;
+                await this.delay(delay);
             }
-
-            this.scrollToBottom();
-
-            // Delay for typing effect
-            let delay = Math.random() * (120 - 50) + 50; // 50-120ms
-            if (token.endsWith(',')) delay = 180;
-            if (token.endsWith('.')) delay = 350;
-            await this.delay(delay);
         }
 
         // Render usage info after streaming is complete
@@ -1332,18 +1341,64 @@ class ChatApp {
     }
     
     formatContent(content) {
+        // Add debugging to understand the content we're receiving
+        console.log('formatContent input (first 200 chars):', content.substring(0, 200));
+        
+        // Check if the content is already HTML-formatted (contains HTML tags)
+        const htmlTagPattern = /<\/?[a-z][\s\S]*>/i;
+        const hasHTMLTags = htmlTagPattern.test(content);
+        
+        console.log('Content has HTML tags:', hasHTMLTags);
+        
+        if (hasHTMLTags) {
+            // Content is already HTML-formatted, return as-is but clean up any encoding issues
+            let cleanedContent = content;
+            
+            // Fix common HTML encoding issues
+            cleanedContent = cleanedContent.replace(/&lt;/g, '<');
+            cleanedContent = cleanedContent.replace(/&gt;/g, '>');
+            cleanedContent = cleanedContent.replace(/&amp;/g, '&');
+            cleanedContent = cleanedContent.replace(/&quot;/g, '"');
+            
+            console.log('Returning cleaned HTML content (first 200 chars):', cleanedContent.substring(0, 200));
+            return cleanedContent;
+        }
+        
+        // Content is plain text, process it normally
+        console.log('Processing as plain text content');
+        
+        // First, let's normalize line breaks and handle cases where code might not be in proper markdown blocks
+        content = content.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+        
         // Store code blocks to protect them from other processing
         const codeBlocks = [];
-        content = content.replace(/```(\w+)?\n?([\s\S]*?)```/g, (match, language, code) => {
-            const lang = language || 'javascript';
+        
+        // Enhanced regex to handle code blocks with or without language specification
+        content = content.replace(/```(\w+)?\s*\n?([\s\S]*?)```/g, (match, language, code) => {
+            const lang = language || 'text';
             const placeholder = `__CODE_BLOCK_${codeBlocks.length}__`;
-            codeBlocks.push(`<pre><code class="language-${lang}">${this.escapeHtml(code.trim())}</code></pre>`);
+            // Preserve original formatting and indentation
+            const cleanCode = code.replace(/^\n+/, '').replace(/\n+$/, '');
+            codeBlocks.push(`<pre><code class="language-${lang}">${this.escapeHtml(cleanCode)}</code></pre>`);
             return placeholder;
+        });
+        
+        // Handle potential code blocks that might be missing markdown formatting
+        // Look for patterns that suggest code (multiple lines with programming syntax)
+        content = content.replace(/(?:^|\n)((?:(?:#include|class|public:|private:|protected:|int|void|string|const|return|if|for|while|switch|namespace|using|\{|\}|;|\/\/|\/\*|\*\/|#define|template|typedef).+\n?){3,})/gm, (match, codeContent) => {
+            // Only process if it's not already in a placeholder
+            if (!codeContent.includes('__CODE_BLOCK_')) {
+                const placeholder = `__CODE_BLOCK_${codeBlocks.length}__`;
+                const cleanCode = codeContent.trim();
+                codeBlocks.push(`<pre><code class="language-cpp">${this.escapeHtml(cleanCode)}</code></pre>`);
+                return placeholder;
+            }
+            return match;
         });
         
         // Store inline code to protect it
         const inlineCodes = [];
-        content = content.replace(/`([^`]+)`/g, (match, code) => {
+        content = content.replace(/`([^`\n]+)`/g, (match, code) => {
             const placeholder = `__INLINE_CODE_${inlineCodes.length}__`;
             inlineCodes.push(`<code>${this.escapeHtml(code)}</code>`);
             return placeholder;
@@ -1399,6 +1454,95 @@ class ChatApp {
         inlineCodes.forEach((code, index) => {
             content = content.replace(`__INLINE_CODE_${index}__`, code);
         });
+        
+        // Final pass: handle any remaining unformatted code-like content
+        content = this.handleUnformattedCode(content);
+        
+        return content;
+    }
+    
+    /**
+     * Handle code-like content that might not be properly formatted in markdown
+     */
+    handleUnformattedCode(content) {
+        // First, let's check if the content looks like code that's been flattened into one line
+        const codeIndicators = [
+            /#include\s*<[^>]+>/g,           // C/C++ includes
+            /class\s+\w+/g,                 // Class declarations  
+            /public:|private:|protected:/g,  // Access specifiers
+            /std::/g,                       // Standard library
+            /return\s+\w+/g,                // Return statements
+            /\w+\(\s*\)/g,                  // Function calls
+            /\{|\}/g                        // Braces
+        ];
+        
+        let codeIndicatorCount = 0;
+        codeIndicators.forEach(pattern => {
+            const matches = content.match(pattern);
+            if (matches) {
+                codeIndicatorCount += matches.length;
+            }
+        });
+        
+        // If we have multiple code indicators, this is likely code
+        if (codeIndicatorCount >= 3) {
+            // Try to add line breaks at logical places for C/C++ code
+            let formattedContent = content;
+            
+            // Add line breaks after includes
+            formattedContent = formattedContent.replace(/(#include\s*<[^>]+>)/g, '$1\n');
+            
+            // Add line breaks before/after class declarations
+            formattedContent = formattedContent.replace(/(class\s+\w+[^{]*{)/g, '\n$1\n');
+            
+            // Add line breaks around access specifiers
+            formattedContent = formattedContent.replace(/(public:|private:|protected:)/g, '\n    $1\n');
+            
+            // Add line breaks after semicolons (but not inside function calls)
+            formattedContent = formattedContent.replace(/;\s*(?![^()]*\))/g, ';\n');
+            
+            // Add line breaks around braces
+            formattedContent = formattedContent.replace(/\s*{\s*/g, ' {\n    ');
+            formattedContent = formattedContent.replace(/\s*}\s*/g, '\n}\n');
+            
+            // Add line breaks before return statements
+            formattedContent = formattedContent.replace(/\s+(return\s+[^;]+;)/g, '\n    $1');
+            
+            // Clean up excessive whitespace
+            formattedContent = formattedContent.replace(/\n\s*\n\s*\n/g, '\n\n');
+            formattedContent = formattedContent.trim();
+            
+            // Wrap in code block
+            return `<pre><code class="language-cpp">${this.escapeHtml(formattedContent)}</code></pre>`;
+        }
+        
+        // Fallback: Look for other programming patterns and handle them
+        const otherCodePatterns = [
+            /function\s+\w+/g,              // JavaScript functions
+            /def\s+\w+/g,                   // Python functions
+            /import\s+\w+/g,                // Import statements
+            /console\.log/g,                // Console logs
+            /document\./g                   // DOM manipulation
+        ];
+        
+        let otherCodeCount = 0;
+        otherCodePatterns.forEach(pattern => {
+            const matches = content.match(pattern);
+            if (matches) {
+                otherCodeCount += matches.length;
+            }
+        });
+        
+        if (otherCodeCount >= 2) {
+            // Basic formatting for other languages
+            let formattedContent = content;
+            formattedContent = formattedContent.replace(/;\s*/g, ';\n');
+            formattedContent = formattedContent.replace(/\s*{\s*/g, ' {\n    ');
+            formattedContent = formattedContent.replace(/\s*}\s*/g, '\n}\n');
+            formattedContent = formattedContent.trim();
+            
+            return `<pre><code class="language-javascript">${this.escapeHtml(formattedContent)}</code></pre>`;
+        }
         
         return content;
     }
@@ -1546,17 +1690,18 @@ class ChatApp {
     }
     
     formatParagraphs(content) {
+        // Split content by double line breaks to identify paragraphs
         const paragraphs = content.split(/\n\s*\n/);
         
         return paragraphs.map(para => {
             const trimmed = para.trim();
             if (!trimmed) return '';
 
-            // Regex to find the first HTML block-level element
-            const blockElementRegex = /<(h[1-6]|table|ul|ol|blockquote|pre|hr)/;
+            // Check if this paragraph contains block-level elements
+            const blockElementRegex = /<(h[1-6]|table|ul|ol|blockquote|pre|hr|div)/i;
             const match = trimmed.match(blockElementRegex);
 
-            // If a block element is found within the paragraph
+            // If a block element is found
             if (match && match.index !== undefined) {
                 // Get the text before the first block element
                 const textBefore = trimmed.substring(0, match.index).trim();
@@ -1564,7 +1709,8 @@ class ChatApp {
 
                 // If there is text before the block element, wrap it in a <p> tag
                 if (textBefore) {
-                    const withBreaks = textBefore.replace(/\n/g, '<br>');
+                    // Better line break handling - preserve intentional line breaks
+                    const withBreaks = textBefore.replace(/\n(?!\s*\n)/g, '<br>');
                     return `<p>${withBreaks}</p>\n\n${restOfContent}`;
                 } else {
                     // Otherwise, return the block element content as is
@@ -1572,8 +1718,9 @@ class ChatApp {
                 }
             }
             
-            // If no block element is found, treat the whole chunk as a standard paragraph
-            const withBreaks = trimmed.replace(/\n/g, '<br>');
+            // If no block element is found, treat as a standard paragraph
+            // Better handling of line breaks within paragraphs
+            const withBreaks = trimmed.replace(/\n(?!\s*\n)/g, '<br>');
             return `<p>${withBreaks}</p>`;
 
         }).filter(p => p).join('\n\n');

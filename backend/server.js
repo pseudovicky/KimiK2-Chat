@@ -195,6 +195,10 @@ app.post('/api/chat', async (req, res) => {
       throw new Error('Invalid response from Ollama: missing message content');
     }
 
+    // Log the raw response content for debugging
+    console.log('Raw AI response content (first 200 chars):', assistantMessage.content.substring(0, 200));
+    console.log('Response contains HTML tags:', /<\/?[a-z][\s\S]*>/i.test(assistantMessage.content));
+
     // Optimized response format
     const optimizedResponse = {
       reply: assistantMessage.content,

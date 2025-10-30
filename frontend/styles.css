@@ -298,10 +298,28 @@ body {
     border-radius: 8px;
     overflow-x: auto;
     position: relative;
+    background: #2d3748 !important;
+    border: 1px solid #4a5568;
+    max-width: 100%;
+}
+
+.message-content pre code {
+    display: block;
+    padding: 1rem;
+    line-height: 1.5;
+    font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', 'SF Mono', 'Courier New', monospace;
+    font-size: 0.9rem;
+    color: #e2e8f0 !important;
+    background: transparent !important;
+    border: none;
+    white-space: pre;
+    overflow-x: auto;
+    tab-size: 4;
+    -moz-tab-size: 4;
 }
 
 .message-content code {
-    font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+    font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', 'SF Mono', 'Courier New', monospace;
     font-size: 0.9rem;
 }
 
@@ -310,6 +328,8 @@ body {
     padding: 0.2rem 0.4rem;
     border-radius: 4px;
     font-size: 0.85rem;
+    color: #e53e3e;
+    font-weight: 500;
 }
 
 /* Enhanced Markdown Styles */
